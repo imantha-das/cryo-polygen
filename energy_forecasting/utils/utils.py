@@ -6,9 +6,13 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import make_column_transformer
 
 import torch 
 from torch.utils.data import DataLoader, TensorDataset
+
+#np.set_printoptions(threshold = np.inf)
 
 # ------------------------------------------------------------------------------
 # Time lag based features 
@@ -54,6 +58,24 @@ def generate_cyclic_features(df:pd.DataFrame, col_name:str, period:int, start_nu
     }
 
     return df.assign(**kwargs).drop(columns = [col_name])
+
+# ------------------------------------------------------------------------------
+# One Hot Encoding
+# ------------------------------------------------------------------------------
+def ohe(df:pd.DataFrame,columns:list[str])->np.array:
+    """
+    Desc : One Hot Encodes
+    Inputs
+        df : DataFrame consisting data
+        columns : columns to one hot encoded
+    """
+    column_trans = make_column_transformer(
+        (OneHotEncoder(), columns),
+        remainder = "passthrough"
+    )
+
+    one_hot_arr = column_trans.fit_transform(df.drop("energy_load", axis = 1))
+    return one_hot_arr
 
 # ------------------------------------------------------------------------------
 # Train - Validation - Test Sets
@@ -155,18 +177,23 @@ if __name__ == "__main__":
     # Replace hour with these components as NN will inherently learn better.
     df = generate_cyclic_features(df, "hour", 24)
 
+    # One Hot Encode Day of Week
+    ohe_arr = ohe(df, ["day_of_week"])
+
     # Windowed dataset - removes last incomplete window
     X,y = windowed_dataset(seq = df["energy_load"], ws=24)
 
     # Add time features to windowed dataset - :len(X) -> removes the respective hour DOW incomplete window 
-    dow_hr = df[["day_of_week", "sin_hour", "cos_hour"]][:len(X)].values
+    #dow_hr = df[["day_of_week", "sin_hour", "cos_hour"]][:len(X)].values
+    ohe_arr = ohe_arr[:len(X)]
 
     # Stack features
-    X = np.hstack((X, dow_hr))
+    X = np.hstack((X, ohe_arr))
 
     # Train - Validation - Test Split 
     X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_split(X, y, 0.15, 0.15)
 
+    # all data : #? (3451)
     # print("shapes") 
     # print(f"X_train : {X_train.shape}") #? (3124,27)
     # print(f"y_train : {y_train.shape}") #? (3124,)

@@ -1,26 +1,20 @@
-# ==============================================================================
-# Desc : Script to perform model training and hyperparam selection
-# ==============================================================================
-# ==============================================================================
-# Imports
-# ==============================================================================
-import pandas as pd 
-import numpy as np
-from utils.utils import windowed_dataset, generate_cyclic_features, train_val_test_split, normalise, torch_dataset, inverse_normalise
-from model.models import LSTM
-
-# Check if you can remove this
-import torch
+import torch 
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
+import numpy as np
+import pandas as pd 
+
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from termcolor import colored
-import plotly.graph_objects as go
+import plotly.graph_objs as go
 
-import nni
+import json
+from datetime import datetime
+
+from model.models import LSTM
+from utils.utils import windowed_dataset, generate_cyclic_features, ohe, train_val_test_split, normalise, torch_dataset, inverse_normalise
 
 # ==============================================================================
 # Train functions
@@ -71,7 +65,7 @@ def train(model,train_loader:DataLoader, val_loader,criterion:nn.modules.loss,op
 # Evaluate 
 # ------------------------------------------------------------------------------
 
-def evaluate(model,loader:DataLoader, batch_size:int):
+def evaluate(model,loader:DataLoader):
     with torch.no_grad():
         predictions = []
         original_values = [] 
@@ -86,7 +80,11 @@ def evaluate(model,loader:DataLoader, batch_size:int):
             original_values.append(y_batch.detach().numpy())
         return predictions, original_values
 
+
 def plot_seq(data:np.array, name:str, fig):
+    """
+    Desc 
+    """
     fig.add_trace(go.Scatter(
         x = np.arange(0, len(data)),
         y = data, 
@@ -100,6 +98,15 @@ def plot_seq(data:np.array, name:str, fig):
 # ------------------------------------------------------------------------------
 
 def plot_losses(training_losses:list, validation_losses:list, epochs:int):
+    """
+    Desc : Plots training and validation losses
+    Inputs
+        training_losses : training loss 
+        validation_losses : validation loss 
+        epochs : number of epochs 
+    Outputs
+        fig : plotly graph object
+    """
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x = np.arange(0, epochs),
@@ -132,32 +139,30 @@ def calculate_metrics(original:np.array, prediction:np.array)->dict:
     return {'mae' : mean_absolute_error(original, prediction),
             'rmse' : mean_squared_error(original, prediction) ** 0.5,
             'r2' : r2_score(original, prediction)}
-    
-
-
-# ==============================================================================
-# Main function
-# ==============================================================================
 
 if __name__ == "__main__":
 
     # --------------------------------------------------------------------------
-    # Hyperparams
+    # Load Hyperparams
     # --------------------------------------------------------------------------
-    window_size = 24
-    batch_size = 32
+    with open("model/hyperparams.json", "r") as f:
+        hyperparams = json.load(f)
+
+    # -> {
+    #       'model': 'lstm', 
+    #       'hidden_size': 32, 
+    #       'num_layers': 2, 
+    #       'optimizer': 'sgd', 
+    #       'learning_rate': 0.005, 
+    #       'window_size': 24, 
+    #       'batch_size': 1, 
+    #       'epochs': 100
+    #    }
+
+    # other parameters (that might be added later)
+    test_ratio = 0.15 
     val_ratio = 0.15
-    test_ratio = 0.15
-
-    epochs = 100 #75 
-    model_name = "lstm"
-    hidden_size = 128
-    num_layers = 2
-    optimizer_name = "adam"
-    lr = 0.001
-    #weight_decay = ??
-    #dropout_prob = ??
-
+    
     # --------------------------------------------------------------------------
     # Load Dataset -> Feature Exctraction -> Train-Val-Test split -> Normalise -> Tensor Dataset
     # --------------------------------------------------------------------------
@@ -169,14 +174,17 @@ if __name__ == "__main__":
     # Replace hour with these components as NN will inherently learn better.
     df = generate_cyclic_features(df, "hour", 24)
 
-    # Windowed dataset - removes last incomplete window
-    X,y = windowed_dataset(seq = df["energy_load"], ws= window_size)
+    # One hot encode day_of_week
+    ohe_arr = ohe(df, ["day_of_week"])
 
-    # Add time features to windowed dataset - :len(X) -> removes the respective hour DOW incomplete window 
-    dow_hr = df[["day_of_week", "sin_hour", "cos_hour"]][:len(X)].values
+    # Windowed dataset - removes last incomplete window
+    X,y = windowed_dataset(seq = df["energy_load"], ws= hyperparams["window_size"])
+
+    # Remove the last incompleted window (Since the windowed dataset removes incompleted window)
+    ohe_arr = ohe_arr[:len(X)]
 
     # Stack features
-    X = np.hstack((X, dow_hr))
+    X = np.hstack((X, ohe_arr))
 
     # Train - Validation - Test Split 
     X_train, X_val, X_test, y_train, y_val, y_test = train_val_test_split(X, y, val_ratio, test_ratio)
@@ -202,61 +210,70 @@ if __name__ == "__main__":
         y_train_norm, 
         y_val_norm, 
         y_test_norm,
-        batch_size = batch_size
+        batch_size = hyperparams["batch_size"]
     )
 
-    # --------------------------------------------------------------------------
-    # Model Training
-    # --------------------------------------------------------------------------
-    models = {"lstm" : LSTM}
-    model = models[model_name](input_size = 27, hidden_size = hidden_size, num_layers = num_layers)
-    optimizers = {"adam" : optim.Adam(model.parameters(), lr = lr)}
-    optimizer = optimizers[optimizer_name]
-    criterion = nn.MSELoss()
 
-    training_losses, val_losses = train(model,train_loader, val_loader, criterion, optimizer, epochs)
+    # --------------------------------------------------------------------------
+    # Load Model Architecture from JSON
+    # --------------------------------------------------------------------------
+    
+    if hyperparams["model"] == "lstm" or "gru":
+        models = {
+            "lstm" : LSTM,
+            #todo GRU needs to be added
+        }
+        model = models[hyperparams["model"]](
+            input_size = X.shape[1],
+            hidden_size= hyperparams["hidden_size"],
+            num_layers = hyperparams["num_layers"],
+            output_size = 1,
+            dropout_prob = 0.2
+        )
+
+    # --------------------------------------------------------------------------
+    # Train Model
+    # --------------------------------------------------------------------------
+    
+    lr = hyperparams["learning_rate"]
+
+    optimizers = {
+        "sdg" : optim.SGD(model.parameters(), lr),
+        "adam" : optim.Adam(model.parameters(), lr),
+        "adamax" : optim.Adamax(model.parameters(), lr)
+    }
+
+    epochs = hyperparams["epochs"]
+    optimizer = optimizers[hyperparams["optimizer"]]
+    criterion = nn.MSELoss()
+    
+    training_losses, val_losses = train(
+        model,
+        train_loader,
+        val_loader,
+        criterion,
+        optimizer,
+        epochs
+    )
+
+    # Save model
+    torch.save(model.state_dict(), f"model/state_dict/{hyperparams['model']+'.pt'}")
 
     p1 = plot_losses(training_losses, val_losses, epochs)
     p1.show()
 
     # --------------------------------------------------------------------------
-    # Evaluation - Testig set
+    # Evaluate Training Set
     # --------------------------------------------------------------------------
 
-    test_predictions, test_original = evaluate(model, test_loader, batch_size)
+    test_predictions, test_original = evaluate(model, test_loader)
     
     # Inverse normalise preditions and originals
     test_predictions = inverse_normalise(np.array(test_predictions).flatten(), normaliser).flatten()
     test_original = inverse_normalise(np.array(test_original).flatten(), normaliser).flatten()
 
     p2 = go.Figure()
-    p2 = plot_seq(test_predictions,"predictions", p2)
     p2 = plot_seq(test_original, "original", p2)
+    p2 = plot_seq(test_predictions,"predictions", p2)
     p2.show()
 
-    # Evaluation - Validation ------------------------------------------------
-    
-    val_predictions, val_original = evaluate(model, val_loader, batch_size)
-
-    # Un-normalise predictions and originals
-    val_predictions = inverse_normalise(np.array(val_predictions).flatten(), normaliser).flatten()
-    val_original = inverse_normalise(np.array(val_original).flatten(), normaliser).flatten()
-
-    p3 = go.Figure()
-    p3 = plot_seq(val_predictions, "predictions", p3)
-    p3 = plot_seq(val_original, "original", p3)
-    p3.show()
-    
-    # --------------------------------------------------------------------------
-    # Compute metrics
-    # --------------------------------------------------------------------------
-
-    metrics = calculate_metrics(test_original, test_predictions)
-    rmse = metrics["rmse"] #rmse on test set
-    
-    print(f"rmse : {metrics['rmse']:.4f}\tmae : {metrics['mae']:.4f}\tr2 : {metrics['r2']:.4f}")
-
-    # Metrics validation
-    metrics_val = calculate_metrics(val_original, val_predictions)
-    print(f"rmse_val : {metrics_val['rmse']:.4f}\tmae_val : {metrics_val['mae']:.4f}\tr2_val : {metrics_val['r2']:.4f}")
-    
