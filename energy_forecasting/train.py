@@ -219,10 +219,12 @@ if __name__ == "__main__":
     # --------------------------------------------------------------------------
     
     if hyperparams["model"] == "lstm" or "gru":
+
         models = {
             "lstm" : LSTM,
             #todo GRU needs to be added
         }
+        
         model = models[hyperparams["model"]](
             input_size = X.shape[1],
             hidden_size= hyperparams["hidden_size"],
