@@ -278,4 +278,4 @@ if __name__ == "__main__":
     p2 = plot_seq(test_original, "original", p2)
     p2 = plot_seq(test_predictions,"predictions", p2)
     p2.show()
-
+    
