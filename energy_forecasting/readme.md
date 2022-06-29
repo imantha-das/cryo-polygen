@@ -7,7 +7,7 @@ The folder contains models to forecast the energy load in the next 1 or 3 hours.
 ## Files & Folders
 
 - data : Contains energy load data in `.csv` format
-- model : All files relevent predictive models
+- model : All files relevent to predictive models
   - state_dict : Trained weights for a particular model
   - hyperparams.json :  Best tuned hyperparameters
   - models.py : Machine learning models
