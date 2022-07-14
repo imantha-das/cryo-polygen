@@ -18,6 +18,13 @@ The folder contains models to forecast the energy load in the next 1 or 3 hours.
 
 ## General Usage
 
+### Cloning Repository
+- To clone repository,
+  - `git clone https://github.com/imantha-das/cryo-polygen/tree/main/energy_forecasting`
+- To update reposity in the event of any changes
+  - `cd <path_to/energy_forecasting>`
+  - `git pull origin main`
+
 ### Hyperparameter tuning
 
 - Run search.py with the relevent hyperparameters indicated in `search_space` varaible (line 9)
