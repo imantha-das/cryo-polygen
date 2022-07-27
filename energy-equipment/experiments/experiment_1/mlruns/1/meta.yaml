@@ -1,0 +1,4 @@
+artifact_location: file:///home/imantha/workspace/cryo-polygen/cryo-polygen/energy-equipment/experiments/experiment_1/mlruns/1
+experiment_id: '1'
+lifecycle_stage: active
+name: svm (fouling thickness)
