@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/imantha/workspace/cryo-polygen/cryo-polygen/energy-equipment/experiments/experiment_1/mlruns/1/c618540f9db54af6895b728102be5956/artifacts
+end_time: 1658943068768
+entry_point_name: ''
+experiment_id: '1'
+lifecycle_stage: active
+name: ''
+run_id: c618540f9db54af6895b728102be5956
+run_uuid: c618540f9db54af6895b728102be5956
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1658943068706
+status: 3
+tags: []
+user_id: imantha

@@ -1,0 +1,4 @@
+artifact_location: file:///Users/imantha/workspace/cryo-polygen/cryo-polygen/energy-equipment/experiments/experiment_1/mlruns/2
+experiment_id: '2'
+lifecycle_stage: active
+name: knn (fouling thickness)

@@ -75,7 +75,7 @@ if __name__ == "__main__":
     print(f"\nX_train : {X_train.shape}, y_train : {y_train.shape}")
     print(f"X_test : {X_test.shape}, y_test : {y_test.shape}")
 
-
+    
 
     #kf = KFold(n_splits = 5, shuffle = True)
     #cv = cross_validate(pipe, X_train, y_train, scoring = "neg_mean_squared_error", return_train_score=True)
