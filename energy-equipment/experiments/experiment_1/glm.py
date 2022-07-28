@@ -5,11 +5,14 @@ from termcolor import colored
 
 from utils import load_data, get_cv_result, eval_metrics
 
-from sklearn.neighbors import KNeighborsRegressor
+from sklearn.linear_model import ElasticNet
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import GridSearchCV, train_test_split, KFold, cross_validate
+from sklearn.model_selection import RandomizedSearchCV, train_test_split, KFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+
+from scipy import stats
+import numpy as np
 
 import mlflow 
 import mlflow.sklearn
@@ -21,19 +24,19 @@ def train_model(param_grid:dict, train_set:tuple):
 
     # Construct pipeline
     pipe = Pipeline([
-        ("scaler",MinMaxScaler()),
-        ("knn",KNeighborsRegressor())
+        #("scaler",MinMaxScaler()),
+        ("glm",ElasticNet())
     ])
 
     # Randomized Search
-    search = GridSearchCV(
+    search = RandomizedSearchCV(
         pipe,
         param_grid,
         scoring = ("neg_mean_squared_error"),
         cv = KFold(n_splits = 5, shuffle = True),
         n_jobs = -1,
         refit = True,
-        #n_iter = 60,
+        n_iter = 100,
         verbose = 2,
         return_train_score = True
     )
@@ -61,27 +64,26 @@ if __name__ == "__main__":
     #print(f"X_test : {X_test.shape}, y_test : {y_test.shape}")
 
     # --------------------------------------------------------------------------
-    # Default Model
+    # Base Model
     # --------------------------------------------------------------------------
 
-    #knn = KNeighborsRegressor()
-    #knn.fit(X_train, y_train)
-    #print(knn.predict(X_test))
+    #glm = ElasticNet()
+    #glm.fit(X_train, y_train)
+    #print(glm.predict(X_test))
 
-    # Base Model Performance Metrics
-    #f_t1 - mse : 4.441521739130435, mae : 1.7347826086956522
-    #f_t2 - mse : 1.4284782608695654, mae : 0.9565217391304348
-    #avg peformance (f_t1 & ft_2) - mse : 2.935000000000001, mae : 1.345652173913043
+    # Accuracy of Base Model
+    #f_t1 - mse : 3.2360022379493767, mae : 1.512705147031476
+    #f_t2 - mse : 1.4824731200533168, mae : 1.0005220758767044
+    #avg peformance (f_t1 & ft_2) - mse : 2.3592376790013456, mae : 1.2566136114540907
 
     # --------------------------------------------------------------------------
-    # Tune Model
+    # Tuned Model
     # --------------------------------------------------------------------------
-
     # Define parameter grid
+    
     param_grid = {
-        "knn__n_neighbors" : [3,5,7,9,11,13,15],
-        "knn__weights" : ["uniform", "distance"],
-        "knn__metric" : ["minkowski","euclidean","manhattan"]
+        "glm__alpha" : stats.uniform(1e-5,100),
+        "glm__l1_ratio" : np.arange(0,1,0.01),
     }
 
     # Train Model
@@ -90,29 +92,29 @@ if __name__ == "__main__":
     print(f"Best Params : {search.best_params_}")
     print(f"Best train score : {search.best_score_}")
 
-    # --------------------------------------------------------------------------
-    # Get CV Results
-    # --------------------------------------------------------------------------
-
+    # Cv results
     results, p = get_cv_result(search)
-    results = results[["param_knn__n_neighbors","param_knn__weights","param_knn__metric","mean_train_score","std_train_score"]]
+    results = results[[
+        "param_glm__alpha",
+        "param_glm__l1_ratio",
+        "mean_train_score",
+        "std_train_score"
+    ]]
+
     print(results.head())
     p.show()
-
+    
     # --------------------------------------------------------------------------
     # Performance Evaluation on testset
     # --------------------------------------------------------------------------
 
     # Check performance Metrics
     performance_measures = eval_metrics(search, (X_test, y_test))
-
-    print(search.best_params_["knn__n_neighbors"])
-
+    
     
     with mlflow.start_run():
-        mlflow.log_param("n_neighbors", search.best_params_["knn__n_neighbors"])
-        mlflow.log_param("weights", search.best_params_["knn__weights"])
-        mlflow.log_param("metric", search.best_params_["knn__metric"])
+        mlflow.log_param("alpha", search.best_params_["glm__alpha"])
+        mlflow.log_param("l1_ratio", search.best_params_["glm__l1_ratio"])
         mlflow.log_metric("avg_train_mse", search.best_score_)
         mlflow.log_metric("avg_test_mse", performance_measures["ft_avg_mse"])
         mlflow.log_metric("avg_test_mae", performance_measures["ft_avg_mae"])
@@ -121,5 +123,5 @@ if __name__ == "__main__":
         mlflow.log_metric("ft2_test_mse", performance_measures["ft2_mse"])
         mlflow.log_metric("ft2_test_mae", performance_measures["ft2_mae"])
 
-        mlflow.sklearn.log_model(search, "models/knn_model")
+        mlflow.sklearn.log_model(search, "models/glm_model")
     

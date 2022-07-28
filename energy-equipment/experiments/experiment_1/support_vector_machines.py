@@ -13,7 +13,7 @@ import numpy as np
 
 import plotly.express as px
 
-from utils import load_data, get_cv_result
+from utils import load_data, get_cv_result, eval_metrics
 
 import mlflow 
 import mlflow.sklearn
@@ -48,20 +48,10 @@ def train_model(param_grid:dict, train_set:tuple):
 
     return search
 
-def eval_metrics(model, test_set:tuple):
-
-    X_test, y_test = test_set
-    yhat_test = search.predict(X_test)
-    mse = mean_squared_error(y_test, yhat_test)
-    mae = mean_absolute_error(y_test, yhat_test)
-    print(f"Root-MSE on testset : {np.sqrt(mse)}, mae : {mae}")
-
-    return mae, mse
-
 
 if __name__ == "__main__":
     # Start Mlflow - Experiment
-    mlflow.set_experiment("svm (fouling thickness)")
+    mlflow.set_experiment("fouling thickness")
 
     # Get Data
     df = load_data("../../data/Dataset1_prediction.xlsx")
@@ -72,13 +62,14 @@ if __name__ == "__main__":
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3)
 
-    print(f"\nX_train : {X_train.shape}, y_train : {y_train.shape}")
-    print(f"X_test : {X_test.shape}, y_test : {y_test.shape}")
+    #print(f"\nX_train : {X_train.shape}, y_train : {y_train.shape}")
+    #print(f"X_test : {X_test.shape}, y_test : {y_test.shape}")
+
+    # --------------------------------------------------------------------------
+    # Base Model
+    # --------------------------------------------------------------------------
 
     
-
-    #kf = KFold(n_splits = 5, shuffle = True)
-    #cv = cross_validate(pipe, X_train, y_train, scoring = "neg_mean_squared_error", return_train_score=True)
 
     # --------------------------------------------------------------------------
     # Randomized Search : Training
@@ -111,20 +102,23 @@ if __name__ == "__main__":
     # --------------------------------------------------------------------------
     # Prediction
     # --------------------------------------------------------------------------
-    mse, mae = eval_metrics(model = search, test_set=(X_test, y_test))
+    performance_measures = eval_metrics(model = search, test_set=(X_test, y_test))
     
 
-
+    
     with mlflow.start_run():
         mlflow.log_param("best_C", search.best_params_["svm__estimator__C"])
         mlflow.log_param("best_gamma", search.best_params_["svm__estimator__gamma"])
         mlflow.log_param("best_kernel", search.best_params_["svm__estimator__kernel"])
         mlflow.log_metric("best_train_mse", search.best_score_)
-        mlflow.log_metric("best_test_mse", mse)
-        mlflow.log_metric("best_test_mae", mae )
+        mlflow.log_metric("avg_test_mse", performance_measures["ft_avg_mse"])
+        mlflow.log_metric("avg_test_mae", performance_measures["ft_avg_mae"])
+        mlflow.log_metric("ft1_test_mse", performance_measures["ft1_mse"])
+        mlflow.log_metric("ft1_test_mae", performance_measures["ft1_mae"])
+        mlflow.log_metric("ft2_test_mse", performance_measures["ft2_mse"])
+        mlflow.log_metric("ft2_test_mae", performance_measures["ft2_mae"])
 
         mlflow.sklearn.log_model(search, "models/svm_model")
-
     
 
 

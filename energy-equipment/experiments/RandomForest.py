@@ -1,9 +1,10 @@
 import pandas as pd
+import numpy as np
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error 
 from sklearn.pipeline import make_pipeline 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 
 # ------------------------------------------------------------------------------
 # Import Data
@@ -36,20 +37,62 @@ df = df.dropna()
 X = df.drop(["f_thickness1", "f_thickness2"],axis = 1)
 y = df[["f_thickness1", "f_thickness2"]]
 
-X_train, X_test,y_train, y_test = train_test_split(X,y, test_size = 0.2, random_state = 0)
-print(f"X_train : {X_train.shape}")
-print(f"y_train : {y_train.shape}")
-print(f"X_test : {X_test.shape}")
-print(f"y_test : {y_test.shape}")
+X_train, X_test,y_train, y_test = train_test_split(X,y, test_size = 0.3, random_state = 0)
+print(f"X_train : {X_train.shape}, {type(X_train)}")
+print(f"y_train : {y_train.shape}, {type(X_test)}")
+print(f"X_test : {X_test.shape}", {type(y_train)})
+print(f"y_test : {y_test.shape}", type(y_test))
+
+X_train = X_train.values 
+X_test = X_test.values 
+y_train = y_train.values 
+y_test = y_test.values
 
 # Normalising - Not Required for RF
 
+# ------------------------------------------------------------------------------
+# Define Hyperparameters
+# ------------------------------------------------------------------------------
 # Grid Search
 param_grid = [
     {
-        "max_depth" : [1,5,10,20,None],
-        "n_estimators" : [32, 64, 100, 200],
-        "min_sample_split" : [0.1,0.3,0.5,1]
-        "min_sample_leaf"
+        "bootstrap" : ["True", "False"],
+        "max_depth" : [None,10,20,50,100],
+        "min_samples_leaf" : [1,2,4],
+        "min_samples_split" : [2,5,10],
+        "n_estimators" : [100,200,500,1000]
     }
 ]
+
+# ------------------------------------------------------------------------------
+# Base - Model
+# ------------------------------------------------------------------------------
+
+"""
+forest = RandomForestRegressor()
+forest.fit(X_train, y_train)
+
+preds = forest.predict(X_test)
+rmse = lambda x1,x2,idx: np.sqrt(mean_squared_error(x1[:,idx],x2[:,idx]))
+
+print(f"RMSE f1_t : {rmse(preds,y_test,0)}")
+print(f"RMSE f2_t : {rmse(preds,y_test,1)}")
+"""
+
+# ------------------------------------------------------------------------------
+# Grid Search
+# ------------------------------------------------------------------------------
+
+forest = RandomForestRegressor()
+grid_search = GridSearchCV(
+    estimator = forest,
+    param_grid = param_grid,
+    cv = 5,
+    verbose = 3,
+    scoring = ("mean_squared_error", "mean_absolute_error")
+)
+grid_search.fit(X_train, y_train)
+
+print(f"Score : {grid_search.score(X_test, y_test)}")
+print(f"Best model : {}")
+
